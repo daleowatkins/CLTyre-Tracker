@@ -16,7 +16,10 @@ import {
   Trash2,
   Calendar,
   Gauge,
-  Clock
+  Clock,
+  Settings,
+  Save,
+  ArrowLeft
 } from 'lucide-react';
 
 // --- Utils & Helpers ---
@@ -39,6 +42,25 @@ const calculateAge = (dot) => {
   if (ageInWeeks < 52) return `${ageInWeeks} weeks old`;
   const ageInYears = (ageInWeeks / 52).toFixed(1);
   return `${ageInYears} years old`;
+};
+
+// Helper to get default specs based on layout
+const getDefaultSpecs = (layout) => {
+  const hgvDefaults = { torque: 600, pressure: 120 };
+  const vanDefaults = { torque: 180, pressure: 55 };
+  
+  switch(layout) {
+    case '2-axle-single': // Van
+      return { front: vanDefaults, rear: vanDefaults };
+    case '2-axle-dual': // Standard Truck/Coach
+      return { front: hgvDefaults, rear: hgvDefaults };
+    case '3-axle-rigid': 
+      return { front: hgvDefaults, drive: hgvDefaults, tag: hgvDefaults };
+    case '3-axle-rear-steer': 
+      return { front: hgvDefaults, drive: hgvDefaults, rear_steer: hgvDefaults };
+    default: 
+      return { front: hgvDefaults, rear: hgvDefaults };
+  }
 };
 
 // Helper to determine axle group from position ID
@@ -244,19 +266,57 @@ function VehicleManager({ vehicles, setVehicles, retorqueRegister }) {
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [selectedWheelId, setSelectedWheelId] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
+  
+  // NEW: Editing State
+  const [editingVehicle, setEditingVehicle] = useState(null);
+
   const [newVehicle, setNewVehicle] = useState({ reg: '', type: 'Van', layout: '2-axle-dual' });
 
   const handleAdd = (e) => {
     e.preventDefault();
-    const defaultSpecs = { front: { torque: 600, pressure: 120 }, rear: { torque: 600, pressure: 120 }, drive: { torque: 600, pressure: 120 }, rear_steer: { torque: 600, pressure: 120 } };
+    const defaultSpecs = getDefaultSpecs(newVehicle.layout);
     setVehicles([...vehicles, { ...newVehicle, id: generateId(), specs: defaultSpecs, wheels: {} }]);
     setIsAdding(false);
     setNewVehicle({ reg: '', type: 'Van', layout: '2-axle-dual' });
   };
 
+  const startEdit = (v) => {
+    setEditingVehicle({ ...v }); // Create a copy to edit
+    setSelectedVehicle(null); // Clear selection view
+  };
+
+  const saveEdit = () => {
+    setVehicles(vehicles.map(v => v.id === editingVehicle.id ? editingVehicle : v));
+    setEditingVehicle(null);
+    setSelectedVehicle(editingVehicle); // Go back to view mode with updated data
+  };
+
+  const handleLayoutChange = (e) => {
+    const newLayout = e.target.value;
+    const newSpecs = getDefaultSpecs(newLayout);
+    // Keep existing reg/type/id, but reset specs/wheels for new layout to prevent bugs
+    if(window.confirm("Changing layout will reset torque/pressure settings to defaults. Continue?")) {
+      setEditingVehicle({ ...editingVehicle, layout: newLayout, specs: newSpecs });
+    }
+  };
+
+  const updateSpec = (axle, field, value) => {
+    setEditingVehicle({
+      ...editingVehicle,
+      specs: {
+        ...editingVehicle.specs,
+        [axle]: {
+          ...editingVehicle.specs[axle],
+          [field]: parseInt(value) || 0
+        }
+      }
+    });
+  };
+
   const selectVehicle = (v) => {
     setSelectedVehicle(v);
     setSelectedWheelId(null);
+    setEditingVehicle(null);
   };
 
   const getSelectedWheelData = () => {
@@ -286,6 +346,8 @@ function VehicleManager({ vehicles, setVehicles, retorqueRegister }) {
             <select className="w-full p-2 border rounded" value={newVehicle.layout} onChange={e => setNewVehicle({...newVehicle, layout: e.target.value})}>
               <option value="2-axle-dual">2 Axle (Dual Rear)</option>
               <option value="3-axle-rear-steer">3 Axle (Rear Steer)</option>
+              <option value="3-axle-rigid">3 Axle Rigid</option>
+              <option value="2-axle-single">2 Axle (Single Rear)</option>
             </select>
             <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Save Vehicle</button>
           </form>
@@ -296,20 +358,127 @@ function VehicleManager({ vehicles, setVehicles, retorqueRegister }) {
             <div 
               key={v.id} 
               onClick={() => selectVehicle(v)}
-              className={`p-4 cursor-pointer transition hover:bg-slate-50 ${selectedVehicle?.id === v.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+              className={`p-4 cursor-pointer transition flex justify-between items-center hover:bg-slate-50 ${selectedVehicle?.id === v.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
             >
-              <div className="font-bold text-lg">{v.reg}</div>
-              <div className="text-xs text-slate-500 flex gap-2">
-                <span>{v.type}</span> • <span className="text-slate-400">{v.layout}</span>
+              <div>
+                <div className="font-bold text-lg">{v.reg}</div>
+                <div className="text-xs text-slate-500 flex gap-2">
+                  <span>{v.type}</span>
+                </div>
               </div>
+              <button 
+                onClick={(e) => { e.stopPropagation(); startEdit(v); }}
+                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition"
+                title="Configure Vehicle"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Frog Column */}
+      {/* Main Detail / Edit Column */}
       <div className="md:col-span-2 relative">
-        {selectedVehicle ? (
+        
+        {/* --- EDIT MODE --- */}
+        {editingVehicle ? (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full flex flex-col animate-fade-in">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                <Settings className="w-6 h-6 text-slate-400" />
+                Configure {editingVehicle.reg}
+              </h2>
+              <button onClick={() => setEditingVehicle(null)} className="text-slate-400 hover:text-red-500"><X className="w-6 h-6" /></button>
+            </div>
+
+            <div className="space-y-6 overflow-y-auto flex-1 p-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Registration</label>
+                  <input 
+                    className="w-full p-2 border rounded" 
+                    value={editingVehicle.reg} 
+                    onChange={e => setEditingVehicle({...editingVehicle, reg: e.target.value})} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Vehicle Type</label>
+                  <input 
+                    className="w-full p-2 border rounded" 
+                    value={editingVehicle.type} 
+                    onChange={e => setEditingVehicle({...editingVehicle, type: e.target.value})} 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Axle Layout Configuration</label>
+                <select 
+                  className="w-full p-2 border rounded bg-slate-50" 
+                  value={editingVehicle.layout} 
+                  onChange={handleLayoutChange}
+                >
+                  <option value="2-axle-dual">2 Axle (Dual Rear)</option>
+                  <option value="3-axle-rear-steer">3 Axle (Rear Steer)</option>
+                  <option value="3-axle-rigid">3 Axle Rigid (Tag)</option>
+                  <option value="2-axle-single">2 Axle (Single Rear)</option>
+                </select>
+                <p className="text-xs text-amber-600 mt-1">Warning: Changing layout resets specs below.</p>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <Wrench className="w-5 h-5 text-blue-600" /> Axle Specifications
+                </h3>
+                
+                <div className="space-y-4">
+                  {Object.keys(editingVehicle.specs).map((axleKey) => (
+                    <div key={axleKey} className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                      <h4 className="font-bold text-slate-700 uppercase text-xs tracking-wider mb-3 border-b border-slate-200 pb-2">
+                        {formatAxleName(axleKey)}
+                      </h4>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">Target Torque (Nm)</label>
+                          <div className="relative">
+                            <input 
+                              type="number" 
+                              className="w-full p-2 pl-9 border rounded font-mono font-bold text-slate-800"
+                              value={editingVehicle.specs[axleKey].torque}
+                              onChange={(e) => updateSpec(axleKey, 'torque', e.target.value)}
+                            />
+                            <Wrench className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-500 mb-1">Target Pressure (PSI)</label>
+                          <div className="relative">
+                            <input 
+                              type="number" 
+                              className="w-full p-2 pl-9 border rounded font-mono font-bold text-slate-800"
+                              value={editingVehicle.specs[axleKey].pressure}
+                              onChange={(e) => updateSpec(axleKey, 'pressure', e.target.value)}
+                            />
+                            <Gauge className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t flex justify-end gap-3">
+              <button onClick={() => setEditingVehicle(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+              <button onClick={saveEdit} className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 flex items-center gap-2 shadow-lg shadow-green-200">
+                <Save className="w-4 h-4" /> Save Configuration
+              </button>
+            </div>
+          </div>
+        ) : selectedVehicle ? (
+          // --- VIEW MODE ---
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
             <div className="flex justify-between items-start mb-6 border-b pb-4">
               <div>
@@ -666,6 +835,20 @@ function VehicleFrog({ vehicle, retorques = [], mode = 'view', onSelect }) {
         <div key="ral" className="flex gap-1">{renderWheel('RLO', 'Outer')}{renderWheel('RLI', 'Inner')}</div>,
         <div key="rar" className="flex gap-1">{renderWheel('RRI', 'Inner')}{renderWheel('RRO', 'Outer')}</div>
       ])}
+      
+      {layout === '2-axle-single' && renderAxle([renderWheel('RL', 'Rear L'), renderWheel('RR', 'Rear R')])}
+
+      {/* 3-Axle Rigid */}
+      {layout === '3-axle-rigid' && (
+        <>
+           {renderAxle([
+            <div key="dal" className="flex gap-1">{renderWheel('DLO', 'Dr L-Out')}{renderWheel('DLI', 'Dr L-In')}</div>,
+            <div key="dar" className="flex gap-1">{renderWheel('DRI', 'Dr R-In')}{renderWheel('DRO', 'Dr R-Out')}</div>
+          ])}
+          <div className="h-8 border-l-4 border-slate-200 border-dashed my-2"></div>
+           {renderAxle([renderWheel('TL', 'Tag L'), renderWheel('TR', 'Tag R')])}
+        </>
+      )}
 
       {/* 3-Axle Rear Steer Layout (Coach) */}
       {layout === '3-axle-rear-steer' && (
