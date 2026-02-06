@@ -57,6 +57,8 @@ import {
   Link2,
   Layers
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const { useState, useEffect, useRef, useMemo } = React;
 
@@ -382,9 +384,9 @@ function VehicleFrog({ vehicle, retorques = [], mode = 'view', onSelect }) {
         {/* Dual Link Button */}
         {mode === 'select' && (
            <button 
-              onClick={() => onSelect({ type: 'dual', positions: [innerPos, outerPos] })}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 bg-white hover:bg-blue-600 hover:text-white p-1 rounded-full shadow border text-slate-400 transition-all opacity-0 group-hover/dual:opacity-100"
-              title="Fit both tyres"
+             onClick={() => onSelect({ type: 'dual', positions: [innerPos, outerPos] })}
+             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 bg-white hover:bg-blue-600 hover:text-white p-1 rounded-full shadow border text-slate-400 transition-all opacity-0 group-hover/dual:opacity-100"
+             title="Fit both tyres"
            >
              <Link2 className="w-3 h-3" />
            </button>
@@ -808,10 +810,10 @@ export default function App() {
              // Since we can't easily query within a batch loop without reads, we will just create the 'Removed' record.
              const removedRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'removed_tyres'));
              batch.set(removedRef, {
-                ...existingTyre,
-                removedDate: fitDateStr,
-                removedFrom: vehicle.reg,
-                removedPosition: positionId
+               ...existingTyre,
+               removedDate: fitDateStr,
+               removedFrom: vehicle.reg,
+               removedPosition: positionId
              });
              // Attempt to delete old inventory record if we have ID
              const oldInvRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory', existingTyre.id);
@@ -888,29 +890,29 @@ export default function App() {
              // 30m
              const r30 = doc(retorqueCol);
              batch.set(r30, {
-                vehicleReg: vehicle.reg,
-                positionId: hubId, // Use Hub ID for retorque
-                fitmentDate: fitDateStr,
-                dueDate: new Date(fitTimeMs + 30 * 60 * 1000).toISOString(),
-                status: 'Pending',
-                type: '30m Check',
-                torqueSpec: spec.torque || 0,
-                fitter: fitterInitials,
-                reason
+               vehicleReg: vehicle.reg,
+               positionId: hubId, // Use Hub ID for retorque
+               fitmentDate: fitDateStr,
+               dueDate: new Date(fitTimeMs + 30 * 60 * 1000).toISOString(),
+               status: 'Pending',
+               type: '30m Check',
+               torqueSpec: spec.torque || 0,
+               fitter: fitterInitials,
+               reason
              });
 
              // 24h
              const r24 = doc(retorqueCol);
              batch.set(r24, {
-                vehicleReg: vehicle.reg,
-                positionId: hubId,
-                fitmentDate: fitDateStr,
-                dueDate: new Date(fitTimeMs + 24 * 60 * 60 * 1000).toISOString(),
-                status: 'Pending',
-                type: '24h Check',
-                torqueSpec: spec.torque || 0,
-                fitter: fitterInitials,
-                reason
+               vehicleReg: vehicle.reg,
+               positionId: hubId,
+               fitmentDate: fitDateStr,
+               dueDate: new Date(fitTimeMs + 24 * 60 * 60 * 1000).toISOString(),
+               status: 'Pending',
+               type: '24h Check',
+               torqueSpec: spec.torque || 0,
+               fitter: fitterInitials,
+               reason
              });
           }
       }
@@ -1154,14 +1156,19 @@ function VehicleManager({ vehicles, onAdd, onUpdate, onDelete, onReorder, canReo
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full flex flex-col animate-enter">
             <div className="mb-4 border-b pb-4 flex justify-between items-start"><div><h2 className="text-2xl font-black text-slate-800">{selectedVehicle.reg}</h2><p className="text-slate-500 font-medium">{selectedVehicle.type}</p></div><div className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">View Mode</div></div>
             <div className="flex-1 relative min-h-[400px]">
-              <VehicleFrog vehicle={selectedVehicle} retorques={retorqueRegister} mode="view" onSelect={setSelectedWheelId} />
+              <VehicleFrog 
+                vehicle={selectedVehicle} 
+                retorques={retorqueRegister} 
+                mode="view" 
+                onSelect={(selection) => setSelectedWheelId(selection.type === 'single' ? selection.pos : null)} 
+              />
               {wheelData && (
                 <div className="absolute top-10 right-0 md:right-10 w-72 bg-slate-900/95 text-white p-5 rounded-xl shadow-2xl z-20 backdrop-blur-md animate-enter border border-slate-700">
                   <div className="flex justify-between mb-4"><h3 className="font-bold text-lg text-blue-400">{formatPosition(wheelData.id)}</h3><button onClick={() => setSelectedWheelId(null)} className="hover:text-red-400 transition-colors"><X className="w-5 h-5"/></button></div>
                   <div className="space-y-4">
                     <div className="bg-slate-800/50 p-3 rounded-lg text-center grid grid-cols-2 gap-4 border border-slate-700"><div><div className="text-xs text-slate-400 uppercase tracking-wider">Torque</div><div className="font-bold text-xl font-mono">{wheelData.spec?.torque}</div></div><div><div className="text-xs text-slate-400 uppercase tracking-wider">Pressure</div><div className="font-bold text-xl font-mono">{wheelData.spec?.pressure}</div></div></div>
                     {wheelData.tyre ? (
-                      <div className="text-sm space-y-1"><div className="font-bold border-b border-slate-700 pb-2 mb-2 text-xs uppercase tracking-wider text-slate-400">FITTED TYRE</div><div className="font-bold text-lg">{wheelData.tyre.brand}</div><div className="text-slate-300">{wheelData.tyre.model}</div><div className="text-slate-400 text-xs">{wheelData.tyre.size}</div><div className="bg-black/30 p-2 rounded text-center font-mono text-xs mt-3 tracking-widest text-emerald-400 border border-emerald-900/50">{wheelData.tyre.barcode}</div><div className="grid grid-cols-2 gap-2 mt-4 text-xs pt-2 border-t border-slate-800"><div><span className="block text-slate-500 mb-0.5">Age</span><span className="text-blue-300 font-bold">{calculateAge(wheelData.tyre.dot)}</span></div><div><span className="block text-slate-500 mb-0.5">Fitter</span><span className="text-white font-bold">{wheelData.tyre.fitter || '-'}</span></div><div className="col-span-2 mt-1"><span className="block text-slate-500 mb-0.5">Date Fitted</span><span className="text-emerald-400 font-medium flex items-center gap-1"><Calendar className="w-3 h-3"/> {new Date(wheelData.tyre.dateFitted).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span></div></div></div>
+                      <div className="text-sm space-y-1"><div className="font-bold border-b border-slate-700 pb-2 mb-2 text-xs uppercase tracking-wider text-slate-400">FITTED TYRE</div><div className="font-bold text-lg">{wheelData.tyre.brand}</div><div className="text-slate-300">{wheelData.tyre.model}</div><div className="text-slate-400 text-xs">{wheelData.tyre.size}</div><div className="bg-black/30 p-2 rounded text-center font-mono text-xs mt-3 tracking-widest text-emerald-400 border border-emerald-900/50">{wheelData.tyre.barcode}</div><div className="grid grid-cols-2 gap-2 mt-4 text-xs pt-2 border-t border-slate-800"><div><span className="block text-slate-500 mb-0.5">Age</span><span className="text-blue-300 font-bold">{calculateAge(wheelData.tyre.dot)}</span></div><div><span className="block text-slate-500 mb-0.5">Fitter</span><span className="text-white font-bold">{wheelData.tyre.fitter || '-'}</span></div><div className="col-span-2 mt-1"><span className="block text-slate-500 mb-0.5">Date Fitted</span><span className="text-emerald-400 font-medium flex items-center gap-1"><Calendar className="w-3 h-3"/> {wheelData.tyre.dateFitted ? new Date(wheelData.tyre.dateFitted).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</span></div></div></div>
                     ) : <div className="text-center text-slate-500 py-6 border-2 border-dashed border-slate-700 rounded-lg">Empty Position</div>}
                   </div>
                 </div>
@@ -1372,10 +1379,10 @@ function FitmentWorkflow({ vehicles, inventory, onFitBatch, currentUser }) {
                   </div>
                   {showCamera && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-                       <div className="relative w-full max-w-sm bg-black rounded-xl overflow-hidden shadow-2xl">
-                         <video ref={videoRef} className="w-full h-auto" />
-                         <button onClick={() => setShowCamera(false)} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full text-white"><X className="w-6 h-6"/></button>
-                       </div>
+                        <div className="relative w-full max-w-sm bg-black rounded-xl overflow-hidden shadow-2xl">
+                          <video ref={videoRef} className="w-full h-auto" />
+                          <button onClick={() => setShowCamera(false)} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full text-white"><X className="w-6 h-6"/></button>
+                        </div>
                     </div>
                   )}
                 </>
@@ -1425,9 +1432,16 @@ function InventoryManager({ inventory, onAddBatch, onDelete, availableSizes, can
   const [printItem, setPrintItem] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
 
+  // Ensure default size is set when sizes load
+  useEffect(() => {
+    if (!form.size && availableSizes.length > 0) {
+      setForm(prev => ({ ...prev, size: availableSizes[0].name }));
+    }
+  }, [availableSizes]);
+
   const { items: sortedInventory, requestSort, sortConfig } = useSortableData(
     inventory.filter(t => {
-      const matchesSearch = t.barcode.includes(filter) || t.brand.toLowerCase().includes(filter.toLowerCase()) || t.size.includes(filter);
+      const matchesSearch = (t.barcode || '').includes(filter) || (t.brand || '').toLowerCase().includes(filter.toLowerCase()) || (t.size || '').includes(filter);
       const matchesStatus = statusFilter === 'All' 
         ? true 
         : statusFilter === 'Fitted' 
@@ -1442,7 +1456,7 @@ function InventoryManager({ inventory, onAddBatch, onDelete, availableSizes, can
     onAddBatch({ 
       brand: form.brand, 
       model: form.model, 
-      size: form.size, 
+      size: form.size || availableSizes[0]?.name, // Fallback if state is empty
       dot: form.dot,
       isUsed: form.isUsed,
       treadDepth: form.isUsed ? form.treadDepth : null
@@ -1450,43 +1464,199 @@ function InventoryManager({ inventory, onAddBatch, onDelete, availableSizes, can
     setForm({ ...form, qty: 1, dot: '', isUsed: false, treadDepth: '' });
   };
 
+  const getCode39Svg = (text) => {
+    // Standard Code 39 Pattern Map (Partial 0-9 for demo)
+    // 0 = Narrow 1 = Wide
+    // Order: B S B S B S B S B (5 bars, 4 spaces)
+    const patterns = {
+      '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
+      '4': '000110001', '5': '100110000', '6': '001110000', '7': '000100101',
+      '8': '100100100', '9': '001100100', '*': '010010100'
+    };
+    
+    const fullText = `*${text}*`;
+    let svgContent = '';
+    let x = 0;
+    const height = 80;
+    const narrow = 2; // pixel width for narrow
+    const wide = 5;   // pixel width for wide (2.5x ratio)
+    
+    for (let char of fullText) {
+      const pat = patterns[char];
+      if(!pat) continue;
+      
+      for (let i = 0; i < 9; i++) {
+        const isWide = pat[i] === '1';
+        const width = isWide ? wide : narrow;
+        
+        if (i % 2 === 0) {
+          // Bar (Black)
+          svgContent += `<rect x="${x}" y="0" width="${width}" height="${height}" fill="black"/>`;
+        }
+        // Else Space (White) - just move x
+        x += width;
+      }
+      // Inter-character gap
+      x += narrow;
+    }
+    
+    return `<svg viewBox="0 0 ${x} ${height}" preserveAspectRatio="none" style="width: 100%; height: 100%;">${svgContent}</svg>`;
+  };
+
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    printWindow.document.write(`
+    if (!printItem) return;
+    
+    const printWindow = window.open('', '_blank', 'width=500,height=700');
+    if (!printWindow) {
+      alert("Please allow popups to print labels.");
+      return;
+    }
+
+    const svgBarcode = getCode39Svg(printItem.barcode);
+
+    const htmlContent = `
       <html>
         <head>
-          <title>Print Label</title>
-          <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39+Text&display=swap" rel="stylesheet">
+          <title>Print Label - ${printItem.barcode}</title>
           <style>
-            body { font-family: sans-serif; text-align: center; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .label { border: 2px solid black; padding: 20px; width: 300px; height: 450px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
-            .barcode { font-family: 'Libre Barcode 39 Text', cursive; font-size: 48px; margin: 10px 0; }
-            .meta { font-size: 14px; font-weight: bold; }
-            .brand { font-size: 28px; font-weight: 900; text-transform: uppercase; }
-            .model { font-size: 18px; margin-bottom: 10px; }
-            .size { font-size: 32px; font-weight: bold; border: 2px solid black; padding: 5px 15px; border-radius: 8px; }
+             /* Physical Paper Size: 60mm Width x 80mm Height */
+             @page { size: 60mm 80mm; margin: 0; }
+             
+             body { 
+               margin: 0; 
+               padding: 0; 
+               width: 60mm; 
+               height: 80mm; 
+               font-family: sans-serif; 
+               overflow: hidden; 
+               position: relative;
+             }
+             
+             /* Rotate content 90deg to print Landscape on the Portrait roll. */
+             .label-container {
+               position: absolute;
+               width: 76mm;  /* 80mm height - margins */
+               height: 56mm; /* 60mm width - margins */
+               left: 50%;
+               top: 50%;
+               transform: translate(-50%, -50%) rotate(90deg);
+               
+               display: flex;
+               flex-direction: column;
+               justify-content: center;
+               align-items: center;
+               text-align: center;
+             }
+
+             .brand { 
+               font-size: 22px; 
+               font-weight: 900; 
+               text-transform: uppercase; 
+               line-height: 1;
+               margin-bottom: 4px;
+             }
+             
+             .model { 
+               font-size: 16px; 
+               font-weight: bold; 
+               margin-bottom: 8px; 
+               white-space: nowrap;
+             }
+             
+             .size { 
+               font-size: 32px; 
+               font-weight: 900; 
+               border: 4px solid black; 
+               padding: 0px 14px; 
+               border-radius: 8px; 
+               margin: 4px 0; 
+               background: white;
+               line-height: 1.2;
+             }
+             
+             .barcode-container {
+               width: 95%;
+               height: 25mm;
+               margin-top: 4px;
+             }
+             
+             .meta { 
+               font-size: 12px; 
+               font-weight: bold; 
+               margin-top: 4px;
+             }
           </style>
         </head>
         <body>
-          <div class="label">
-            <div>
-              <div class="brand">${printItem.brand}</div>
-              <div class="model">${printItem.model}</div>
-            </div>
+          <div class="label-container">
+            <div class="brand">${printItem.brand}</div>
+            <div class="model">${printItem.model}</div>
             <div class="size">${printItem.size}</div>
-            <div class="barcode">*${printItem.barcode}*</div>
-            <div class="meta">
-              <div>S/N: ${printItem.barcode}</div>
-              <div style="margin-top:5px">DOT: ${printItem.dot}</div>
-            </div>
+            <div class="barcode-container">${svgBarcode}</div>
+            <div class="meta">DOT: ${printItem.dot || 'N/A'} - ${printItem.barcode}</div>
           </div>
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
         </body>
       </html>
-    `);
-    printWindow.document.close();
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close(); // Crucial for finishing the document stream
+
+    // Wait a moment for the content to render, then print
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 500);
+  };
+
+  const handleInventoryReport = () => {
+    const inStock = inventory.filter(t => t.status === 'In Stock');
+    if (inStock.length === 0) {
+      alert('No in-stock tyres to report.');
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const reportDate = new Date();
+    const dateStr = reportDate.toLocaleDateString();
+
+    doc.setFontSize(18);
+    doc.text('Inventory Report - In Stock (Not Fitted)', 40, 50);
+    doc.setFontSize(10);
+    doc.text(`Generated: ${dateStr}`, 40, 68);
+    doc.text(`Total In Stock: ${inStock.length}`, 40, 84);
+
+    const rows = inStock.map(t => ([
+      t.barcode || '-',
+      t.brand || '-',
+      t.model || '-',
+      t.size || '-',
+      t.dot || '-',
+      calculateAge(t.dot),
+      t.isUsed ? 'Yes' : 'No',
+      t.isUsed ? (t.treadDepth || '-') : '-'
+    ]));
+
+    autoTable(doc, {
+      head: [[
+        'Barcode',
+        'Brand',
+        'Model',
+        'Size',
+        'DOT',
+        'Age',
+        'Used',
+        'Tread (mm)'
+      ]],
+      body: rows,
+      startY: 105,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175] },
+      alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+
+    const fileDate = reportDate.toISOString().slice(0, 10);
+    doc.save(`inventory_in_stock_${fileDate}.pdf`);
   };
 
   return (
@@ -1505,12 +1675,21 @@ function InventoryManager({ inventory, onAddBatch, onDelete, availableSizes, can
           </form>
         </div>
       )}
+      
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="p-4 bg-slate-50 border-b flex flex-col md:flex-row justify-between items-center gap-4">
           <h3 className="font-bold text-slate-700">Serialized Inventory</h3>
           <div className="flex gap-2 w-full md:w-auto">
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border p-2 rounded text-sm bg-white"><option value="All">All Status</option><option value="In Stock">In Stock</option><option value="Fitted">Fitted</option></select>
             <div className="relative flex-1 md:flex-none"><Search className="absolute left-2 top-2 w-4 h-4 text-slate-400"/><input placeholder="Search..." className="pl-8 p-2 border rounded text-sm w-full" value={filter} onChange={e=>setFilter(e.target.value)}/></div>
+            <button
+              onClick={handleInventoryReport}
+              className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 shadow-md transition btn-press"
+              title="Export PDF of all in-stock tyres"
+            >
+              <Download className="w-4 h-4" />
+              All Stock Report
+            </button>
           </div>
         </div>
         <table className="w-full text-sm text-left">
@@ -1518,10 +1697,17 @@ function InventoryManager({ inventory, onAddBatch, onDelete, availableSizes, can
           <tbody className="divide-y">{sortedInventory.map(t => (<tr key={t.id} className="hover:bg-slate-50 transition-colors"><td className="p-3 font-mono font-bold">{t.barcode}</td><td className="p-3"><div className="font-medium text-slate-900">{t.brand} {t.model}</div><div className="text-xs text-slate-500">{t.size}</div>{t.isUsed && <span className="inline-block bg-amber-100 text-amber-800 text-[10px] px-1 rounded border border-amber-200 mt-1">Used: {t.treadDepth}mm</span>}</td><td className="p-3"><div className="text-xs font-bold text-slate-600">{calculateAge(t.dot)}</div><div className="text-xs text-slate-400">DOT: {t.dot}</div></td><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${t.status==='In Stock'?'bg-green-100 text-green-700':'bg-slate-100 text-slate-500'}`}>{t.status}</span>{t.status==='Fitted' && <div className="text-xs mt-1 text-slate-500 font-medium">{t.vehicleReg}</div>}</td><td className="p-3 text-right"><div className="flex justify-end gap-2"><button onClick={()=>setPrintItem(t)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all" title="Print Label"><Printer className="w-4 h-4"/></button>{canAdd && <button onClick={()=>onDelete(t.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all" title="Delete Stock"><Trash2 className="w-4 h-4"/></button>}</div></td></tr>))}</tbody>
         </table>
       </div>
+
       {printItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 text-center">
-            <h3 className="font-bold text-xl mb-4">{printItem.brand}</h3><div className="font-mono text-3xl font-black bg-slate-100 p-4 mb-4">{printItem.barcode}</div><div className="flex gap-2"><button onClick={()=>setPrintItem(null)} className="flex-1 py-2 border rounded">Cancel</button><button onClick={handlePrint} className="flex-1 py-2 bg-blue-600 text-white rounded">Print Now</button></div>
+            <h3 className="font-bold text-xl mb-4">{printItem.brand}</h3>
+            <div className="font-mono text-3xl font-black bg-slate-100 p-4 mb-4">{printItem.barcode}</div>
+            <p className="text-sm text-slate-500 mb-6">Ensure printer is set to 60mm x 80mm media.</p>
+            <div className="flex gap-2">
+              <button onClick={()=>setPrintItem(null)} className="flex-1 py-3 border rounded-lg hover:bg-slate-50 font-medium">Cancel</button>
+              <button onClick={handlePrint} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg btn-press flex items-center justify-center gap-2"><Printer className="w-5 h-5"/> Print Label</button>
+            </div>
           </div>
         </div>
       )}
